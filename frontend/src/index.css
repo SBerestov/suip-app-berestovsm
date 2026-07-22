@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  @apply bg-gray-100 lg:px-10 lg:py-11 p-3
+}
+
+.no-scroll {
+  @apply overflow-hidden;
+}
+
+/* Скрытие скроллбара */
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE и Edge */
+  scrollbar-width: none;     /* Firefox */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* Анимации */
+@keyframes slideIn {
+  from { top: -50px; }
+  to { top: 20px; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.success-message {
+  animation: slideIn 0.3s, fadeOut 0.5s 2.5s;
+}
+
+.item-data {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+
+.item-data:active {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@layer components {
+  .item-data {
+    @apply relative;
+  }
+
+  .item-data::before {
+    @apply content-[''] absolute left-0 top-0 bottom-0 w-5;
+    background: linear-gradient(270deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 1) 100%);
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  .item-data.scroll-start::before {
+    @apply opacity-0;
+  }
+
+  .item-data::after {
+    @apply content-[''] absolute right-0 top-0 bottom-0 w-5;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 1) 100%);
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  .item-data.scroll-start::after {
+    @apply opacity-100;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(-50%) translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
