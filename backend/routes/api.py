@@ -8,6 +8,8 @@ import os
 from werkzeug.utils import secure_filename
 from PIL import Image, ExifTags
 
+# TODO: allowed_file
+
 api_bp = Blueprint('api', __name__)
 
 @api_bp.route('/<table_name>')
@@ -55,6 +57,8 @@ def get_table(table_name):
         "search_query": search_query,
         "columns": columns
     })
+
+# TODO: /add-form-fields, /add/table, /update/table/:id
     
 @api_bp.route('/<table_name>/<int:entry_id>')
 def get_entry(table_name, entry_id):
@@ -88,6 +92,7 @@ def delete_entry(table_name, entry_id):
         
     return jsonify({"success": True}), 200
 
+# TODO: /upload_image, /delete_image, /uploads
 
 @api_bp.route('/test', methods=['GET'])
 def test_endpoint():
