@@ -1,16 +1,24 @@
 from flask import Blueprint, render_template, request, jsonify, current_app, url_for, send_from_directory
 from backend.database import get_db_cursor
 import logging
-import uuid
-from datetime import datetime
 from psycopg2 import sql, DatabaseError
 import os
 from werkzeug.utils import secure_filename
-from PIL import Image, ExifTags
+from PIL import Image
 
-# TODO: allowed_file
+# Настройки для загрузки изображения
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+UPLOAD_FOLDER = 'static/uploads/materials'
+
+def allowed_file(filename):
+    return '.' in filename and \
+        filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 api_bp = Blueprint('api', __name__)
+
+# Настройка логгера
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 @api_bp.route('/<table_name>')
 def get_table(table_name):
@@ -166,7 +174,7 @@ def add_entry(table_name):
     except Exception as e:
         logger.error(f"Error: {e}")
         return jsonify({"error": str(e)}), 500
-
+    
 @api_bp.route('/<table_name>/<int:entry_id>')
 def get_entry(table_name, entry_id):
     allowed_tables = ['os', 'works', 'materials', 'equipment']
@@ -185,8 +193,6 @@ def get_entry(table_name, entry_id):
         
     return jsonify(data)
     
-# TODO: /update/table/:id
-
 @api_bp.route('/delete/<table_name>/<int:entry_id>', methods=['DELETE'])
 def delete_entry(table_name, entry_id):
     allowed_tables = ['os', 'works', 'materials', 'equipment']
@@ -201,7 +207,166 @@ def delete_entry(table_name, entry_id):
         
     return jsonify({"success": True}), 200
 
-# TODO: /upload_image, /delete_image, /uploads
+@api_bp.route('/update/<table_name>/<int:entry_id>', methods=['PUT'])
+def update_entry(table_name, entry_id):
+    try:
+        # Обработка обычных полей формы
+        if request.content_type and 'application/json' in request.content_type:
+            form_data = request.get_json()
+        else:
+            form_data = request.values.to_dict()
+        
+        # Обработка изображения
+        if 'image' in request.files:
+            file = request.files['image']
+            if file.filename != '':
+                # Сохраняем изображение
+                upload_path = os.path.join(current_app.root_path, UPLOAD_FOLDER)
+                os.makedirs(upload_path, exist_ok=True)
+                
+                filename = secure_filename(f"{table_name}_{entry_id}_{file.filename}")
+                filepath = os.path.join(upload_path, filename)
+                
+                img = Image.open(file.stream)
+                if img.width > 400:
+                    ratio = 400 / img.width
+                    new_height = int(img.height * ratio)
+                    img = img.resize((400, new_height), Image.LANCZOS)
+                
+                base, ext = os.path.splitext(filename)
+                if ext.lower() != '.webp':
+                    filename = base + '.webp'
+                    filepath = os.path.join(upload_path, filename)
+                
+                img.save(filepath, 'WEBP', quality=85)
+                form_data['IMAGE_PATH'] = os.path.join('uploads', 'materials', filename)
+        
+        # Обновление записи в БД
+        with get_db_cursor() as cursor:
+            cursor.execute(f"SELECT * FROM {table_name} LIMIT 0")
+            columns = [desc[0] for desc in cursor.description]
+            
+            valid_data = {}
+            for key, value in form_data.items():
+                if key in columns:
+                    valid_data[key] = value
+            
+            if not valid_data:
+                return jsonify({"error": "No valid fields to update"}), 400
+                
+            # Формируем SQL запрос
+            set_clause = ', '.join([f'"{k}" = %s' for k in valid_data.keys()])
+            values = list(valid_data.values())
+            values.append(entry_id)
+            
+            query = f'UPDATE {table_name} SET {set_clause} WHERE \"ID\" = %s'
+            cursor.execute(query, values)
+            
+        return jsonify({
+            "success": True,
+            "image_url": url_for('static', filename=form_data.get('IMAGE_PATH', ''))
+        })
+        
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        return jsonify({"error": str(e)}), 500
+    
+@api_bp.route('/upload_image/<table_name>/<int:entry_id>', methods=['POST'])
+def upload_image(table_name, entry_id):
+    if table_name not in ['os', 'works', 'materials', 'equipment']:
+        return jsonify({"error": "Invalid table"}), 400
+    
+    if 'image' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+    
+    file = request.files['image']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+    
+    if file and allowed_file(file.filename):
+        try:
+            # Создаем папку для загрузок
+            upload_path = os.path.join(current_app.root_path, UPLOAD_FOLDER)
+            os.makedirs(upload_path, exist_ok=True)
+            
+            # Обработка имени файла
+            filename = secure_filename(f"{table_name}_{entry_id}_{file.filename}")
+            filepath = os.path.join(upload_path, filename)
+            
+            # Открываем и обрабатываем изображение
+            img = Image.open(file.stream)
+            
+            # Сжимаем изображение
+            if img.width > 400:
+                ratio = 400 / img.width
+                new_height = int(img.height * ratio)
+                img = img.resize((400, new_height), Image.LANCZOS)
+                
+            # Конвертация в формат webp
+            base, ext = os.path.splitext(filename)
+            if ext.lower() != '.webp':
+                filename = base + '.webp'
+                filepath = os.path.join(upload_path, filename)
+                
+            img.save(filepath, 'WEBP', quality=85)
+            
+            # Сохраняем путь в БД
+            relative_path = os.path.join('uploads', 'materials', filename)
+            with get_db_cursor() as cursor:
+                query = sql.SQL("UPDATE {} SET \"IMAGE_PATH\" = %s WHERE \"ID\" = %s").format(
+                    sql.Identifier(table_name)
+                )
+                cursor.execute(query, (relative_path, entry_id))
+                
+            return jsonify({
+                "success": True,
+                "image_url": url_for('static', filename=relative_path)
+            })
+            
+        except Exception as e:
+            logger.error(f"Error processing image: {e}")
+            return jsonify({"error": str(e)}), 500
+        
+    return jsonify({"error": "Invalid file type"}), 400
+
+@api_bp.route('/delete_image/<table_name>/<int:entry_id>', methods=['DELETE'])
+def delete_image(table_name, entry_id):
+    try:
+        with get_db_cursor() as cursor:
+            # Получаем текущий путь изображения
+            cursor.execute(
+                sql.SQL("SELECT \"IMAGE_PATH\" FROM {} WHERE \"ID\" = %s").format(
+                    sql.Identifier(table_name)
+                ),
+                (entry_id,)
+            )
+            image_path = cursor.fetchone()[0]
+            
+            if image_path:
+                # Удаляем файл
+                full_path = os.path.join(current_app.root_path, 'static', image_path)
+                if os.path.exists(full_path):
+                    os.remove(full_path)
+                
+                # Обновляем запись в БД
+                cursor.execute(
+                    sql.SQL("UPDATE {} SET \"IMAGE_PATH\" = NULL WHERE \"ID\" = %s").format(
+                        sql.Identifier(table_name)
+                    ),
+                    (entry_id,)
+                )
+            
+        return jsonify({"success": True})
+        
+    except Exception as e:
+        logger.error(f"Error deleting image: {e}")
+        return jsonify({"error": str(e)}), 500
+    
+@api_bp.route('/uploads/<path:subpath>')
+def get_uploaded_image(subpath):
+    uploads_dir = os.path.join(current_app.root_path, 'static', 'uploads')
+    return send_from_directory(uploads_dir, subpath)
+
 
 @api_bp.route('/test', methods=['GET'])
 def test_endpoint():
