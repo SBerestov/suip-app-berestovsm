@@ -1,6 +1,6 @@
 import React from "react";
 import { FloatingButton } from "./FloatingButton";
-import { AddEntryWizard } from "./AddEntryWizard";
+import { AddEntryWizard } from "./Modals/AddEntryWizard";
 
 interface TableContainerProps {
   title: string;

@@ -40,7 +40,7 @@ export const NotificationProvider: React.FC<{children: React.ReactNode}> = ({ ch
 
     setTimeout(() => {
       removeNotification(id);
-    }, 1800);
+    }, 3000);
   };
 
   const removeNotification = (id: string) => {

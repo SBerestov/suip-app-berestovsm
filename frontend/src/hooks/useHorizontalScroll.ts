@@ -51,7 +51,7 @@ export const useHorizontalScroll = () => {
       }
     };
     
-    const handleTouchMove = (e: TouchEvent) => {
+    const handleTouchMove = () => {
       if (!isDragging || !isTouchDevice.current) return;
     };
 
