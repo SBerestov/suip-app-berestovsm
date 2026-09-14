@@ -48,8 +48,10 @@ function AppContent() {
       throw new Error("Ошибка при добавлении записи");
     }
 
+    const result = await response.json();
     refreshData();
     showNotification(activeTable, 'success');
+    return result.id;
   };
 
   const handleDeleteEntry = async (id: number) => {
@@ -121,6 +123,7 @@ function AppContent() {
             data={item}
             onDelete={handleDeleteEntry}
             onUpdate={handleUpdateEntry}
+            onChange={refreshData}
           />
         ));
       case "works":
@@ -130,6 +133,7 @@ function AppContent() {
             data={item}
             onDelete={handleDeleteEntry}
             onUpdate={handleUpdateEntry}
+            onChange={refreshData}
           />
         ));
       case "materials":
@@ -139,6 +143,7 @@ function AppContent() {
             data={item}
             onDelete={handleDeleteEntry}
             onUpdate={handleUpdateEntry}
+            onChange={refreshData}
           />
         ));
       case "equipment":
@@ -148,6 +153,7 @@ function AppContent() {
             data={item}
             onDelete={handleDeleteEntry}
             onUpdate={handleUpdateEntry}
+            onChange={refreshData}
           />
         ));
       default:

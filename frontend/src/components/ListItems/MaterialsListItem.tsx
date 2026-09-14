@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import type { MaterialsItem } from "../../types";
 import { useHorizontalScroll } from "../../hooks/useHorizontalScroll";
 import { ViewItemModal } from "../Modals/ViewItemModal";
@@ -7,40 +7,45 @@ interface MaterialsItemProps {
   data: MaterialsItem;
   onDelete: (id: number) => Promise<void>;
   onUpdate: (id: number, data: any) => Promise<void>;
+  onChange?: () => void;
 }
 
 export const MaterialsListItem: React.FC<MaterialsItemProps> = ({
   data,
   onDelete,
   onUpdate,
+  onChange,
 }) => {
   const imagePath = data.IMAGE_PATH ? data.IMAGE_PATH.split(",") : [];
+  const imageUrl =
+    imagePath.length > 0 ? `/api/${imagePath[0]}` : "/images/krisa.webp";
 
   const [isModalOpen, setIsModalOpen] = React.useState(false);
-  const [currentImageUrl, setCurrentImageUrl] = React.useState(
-    imagePath.length > 0 ? `/api/${imagePath[0]}` : "/images/krisa.webp"
-  );
 
-  const handleImageChange = (newUrl: string | null) => {
-    setCurrentImageUrl(newUrl || "/images/krisa.webp");
-  };
+  const { scrollLeft, hasMoved } = useHorizontalScroll();
 
-  const scrollRef = useHorizontalScroll();
+  const handleClick = useCallback(() => {
+    if (!hasMoved.current) {
+      setIsModalOpen(true);
+    } else {
+      hasMoved.current = false;
+    }
+  }, [hasMoved]);
 
   return (
     <>
       <li
         className="flex items-center min-w-0 bg-white rounded-xl box-border gap-2 p-2 cursor-pointer lg:gap-3 lg:px-4 lg:py-1.25"
-        onClick={() => setIsModalOpen(true)}
+        onClick={handleClick}
       >
         <img
-          src={currentImageUrl}
+          src={imageUrl}
           className="object-cover rounded-xl px-0 py-1.25 h-15 w-15 lg:h-22.5 lg:w-22.5"
           loading="lazy"
         />
         <div className="flex-1 min-w-0">
           <div
-            ref={scrollRef}
+            ref={scrollLeft}
             className="item-data grid grid-cols-[auto_auto] auto-cols-auto cursor-grab gap-x-2 gap-y-1 overflow-x pb-2.5 mb-[-10px] [scrollbar-width:none] transition-[overflow-x] duration-300 ease-in-out relative select-none overflow-hidden lg:pb-2 lg:mb-[-8px]"
           >
             <div className="flex gap-2 whitespace-nowrap order-1">
@@ -109,13 +114,14 @@ export const MaterialsListItem: React.FC<MaterialsItemProps> = ({
       {isModalOpen && (
         <ViewItemModal
           isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
+          onClose={() => {
+            setIsModalOpen(false);
+            onChange?.();
+          }}
           data={data}
           tableType="materials"
-          imageUrl={currentImageUrl}
           onDelete={onDelete}
           onUpdate={onUpdate}
-          onImageChange={handleImageChange}
           title="Детали записи"
         />
       )}

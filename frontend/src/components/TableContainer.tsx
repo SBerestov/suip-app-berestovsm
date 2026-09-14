@@ -7,7 +7,7 @@ interface TableContainerProps {
   children: React.ReactNode;
   searchQuery: string;
   onSearch: (query: string) => void;
-  onAddEntry: (data: any) => Promise<void>;
+  onAddEntry: (data: any) => Promise<number>;
   tableType: string;
 }
 

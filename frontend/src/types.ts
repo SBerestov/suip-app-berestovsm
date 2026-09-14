@@ -32,6 +32,32 @@ export interface WorksItem extends BaseItem {
   DESCRIPTION: string;
   OS: string;
   PLANNED_DATE: string;
+  MATERIALS_COUNT: number;
+}
+
+export interface WorkMaterial {
+  LINK_ID: number;
+  MATERIAL_ID: number;
+  MATERIAL_NAME: string;
+  MATERIAL_TYPE: string;
+  PART_NUMBER: string | null;
+  SERIAL_NUMBER: string | null;
+  STORE_ADDRESS: string | null;
+  PLANNED_QUANTITY: number | null;
+  ACTUAL_QUANTITY: number | null;
+  NOTE: string | null;
+}
+
+export interface MaterialWork {
+  LINK_ID: number;
+  WORK_ID: number;
+  WORK_NAME: string;
+  OS: string;
+  STATUS: string;
+  PLANNED_DATE: string;
+  PLANNED_QUANTITY: number | null;
+  ACTUAL_QUANTITY: number | null;
+  NOTE: string | null;
 }
 
 export interface EquipmentItem extends BaseItem {

@@ -6,10 +6,16 @@ export const useTableData = (tableName: TableType, searchQuery: string, refreshT
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
+  const prevQuery = React.useRef<string | null>(null);
+
   React.useEffect(() => {
+    const queryKey = `${tableName}|${searchQuery}`;
+    const showSpinner = prevQuery.current !== queryKey;
+    prevQuery.current = queryKey;
+
     const fetchData = async () => {
       try {
-        setLoading(true);
+        if (showSpinner) setLoading(true);
         setError(null);
 
         const response = await fetch(`/api/${tableName}?search=${encodeURIComponent(searchQuery)}`);

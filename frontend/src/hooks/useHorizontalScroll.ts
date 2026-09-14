@@ -5,7 +5,8 @@ export const useHorizontalScroll = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [startX, setStartX] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);
-  const isTouchDevice = useRef(false); // Флаг для определения типа устройства
+  const isTouchDevice = useRef(false);
+  const hasMoved = useRef(false);
 
   useEffect(() => {
     const el = elRef.current;
@@ -13,6 +14,7 @@ export const useHorizontalScroll = () => {
 
     const startDrag = (clientX: number) => {
       setIsDragging(true);
+      hasMoved.current = false;
       setStartX(clientX - el.offsetLeft);
       setScrollLeft(el.scrollLeft);
       el.style.cursor = "grabbing";
@@ -23,7 +25,7 @@ export const useHorizontalScroll = () => {
       setIsDragging(false);
       el.style.cursor = "grab";
       el.style.userSelect = "";
-      isTouchDevice.current = false; // Сбрасываем флаг
+      isTouchDevice.current = false;
     };
 
     const moveDrag = (clientX: number) => {
@@ -31,6 +33,10 @@ export const useHorizontalScroll = () => {
       const x = clientX - el.offsetLeft;
       const walk = (x - startX) * 1.5;
       el.scrollLeft = scrollLeft - walk;
+
+      if (Math.abs(el.scrollLeft - scrollLeft) > 5) {
+        hasMoved.current = true;
+      }
     };
 
     const handleMouseDown = (e: MouseEvent) => {
@@ -45,21 +51,15 @@ export const useHorizontalScroll = () => {
 
     const handleTouchStart = (e: TouchEvent) => {
       isTouchDevice.current = true;
-      
       if (el.scrollWidth > el.clientWidth) {
         startDrag(e.touches[0].clientX);
       }
-    };
-    
-    const handleTouchMove = () => {
-      if (!isDragging || !isTouchDevice.current) return;
     };
 
     const handleScroll = () => {
       if (!el) return;
       const scrollLeft = el.scrollLeft;
       const maxScroll = el.scrollWidth - el.clientWidth;
-
       el.classList.toggle("scroll-start", scrollLeft <= 0);
       el.classList.toggle("scroll-end", scrollLeft >= maxScroll);
     };
@@ -70,8 +70,6 @@ export const useHorizontalScroll = () => {
     el.addEventListener("mouseleave", endDrag);
 
     el.addEventListener("touchstart", handleTouchStart, { passive: true });
-    el.addEventListener("touchmove", handleTouchMove, { passive: true });
-    el.addEventListener("touchend", endDrag, { passive: true });
     el.addEventListener("touchcancel", endDrag, { passive: true });
 
     el.addEventListener("scroll", handleScroll, { passive: true });
@@ -83,15 +81,11 @@ export const useHorizontalScroll = () => {
       el.removeEventListener("mousemove", handleMouseMove);
       el.removeEventListener("mouseup", endDrag);
       el.removeEventListener("mouseleave", endDrag);
-
       el.removeEventListener("touchstart", handleTouchStart);
-      el.removeEventListener("touchmove", handleTouchMove);
-      el.removeEventListener("touchend", endDrag);
       el.removeEventListener("touchcancel", endDrag);
-
       el.removeEventListener("scroll", handleScroll);
     };
   }, [isDragging, startX, scrollLeft]);
 
-  return elRef;
+  return { scrollLeft: elRef, hasMoved };
 };
