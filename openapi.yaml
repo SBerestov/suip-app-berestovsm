@@ -1,0 +1,956 @@
+openapi: 3.0.3
+
+info:
+  title: SUIP API
+  version: 1.0.0
+  description: |
+    REST API системы учета и планирования (СУиП).
+
+    Предметная область:
+    - `equipment` — справочник моделей оборудования;
+    - `materials` — запчасти (склад, `QUANTITY` — остаток);
+    - `os` — серверы (общая информация);
+    - `works` — работы на серверах;
+    - `works_materials` — связь many-to-many между работами и материалами
+      (плановое/фактическое количество). При списании по факту уменьшается
+      `materials.QUANTITY`.
+
+    Все эндпоинты доступны по префиксу `/api`.
+  contact:
+    name: SUIP
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Локальный запуск (run.py)
+  - url: /
+    description: Относительно текущего хоста
+
+tags:
+  - name: Tables
+    description: CRUD-операции по таблицам os, works, materials, equipment
+  - name: WorkMaterials
+    description: Связь работ и материалов (many-to-many)
+  - name: Images
+    description: Загрузка, получение и удаление изображений
+  - name: Options
+    description: Справочные значения для выпадающих списков
+  - name: System
+    description: Служебные эндпоинты
+
+paths:
+  /api/{table_name}:
+    get:
+      tags: [Tables]
+      summary: Список записей таблицы (с поиском)
+      operationId: getTable
+      parameters:
+        - $ref: '#/components/parameters/TableNamePath'
+        - name: search
+          in: query
+          required: false
+          description: Подстрока для поиска по всем текстовым полям
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Список записей
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TableListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/add-form-fields:
+    get:
+      tags: [Tables]
+      summary: Поля формы добавления записи
+      operationId: getAddFormFields
+      parameters:
+        - name: table
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/TableName'
+      responses:
+        '200':
+          description: Список колонок и их переводы
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddFormFieldsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/options/{kind}:
+    get:
+      tags: [Options]
+      summary: Значения для выпадающих списков
+      operationId: getOptions
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - os_models
+              - equipment_models
+      responses:
+        '200':
+          description: Список значений
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OptionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/add/{table_name}:
+    post:
+      tags: [Tables]
+      summary: Добавить запись
+      operationId: addEntry
+      parameters:
+        - $ref: '#/components/parameters/TableNamePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericRow'
+      responses:
+        '200':
+          description: Запись создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/{table_name}/{entry_id}:
+    get:
+      tags: [Tables]
+      summary: Получить запись по ID
+      operationId: getEntry
+      parameters:
+        - $ref: '#/components/parameters/TableNamePath'
+        - $ref: '#/components/parameters/EntryId'
+      responses:
+        '200':
+          description: Запись
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Os'
+                  - $ref: '#/components/schemas/Work'
+                  - $ref: '#/components/schemas/Material'
+                  - $ref: '#/components/schemas/Equipment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/update/{table_name}/{entry_id}:
+    put:
+      tags: [Tables]
+      summary: Обновить запись
+      operationId: updateEntry
+      parameters:
+        - $ref: '#/components/parameters/TableNamePath'
+        - $ref: '#/components/parameters/EntryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericRow'
+          multipart/form-data:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/GenericRow'
+                - type: object
+                  properties:
+                    image:
+                      type: string
+                      format: binary
+      responses:
+        '200':
+          description: Запись обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/delete/{table_name}/{entry_id}:
+    delete:
+      tags: [Tables]
+      summary: Удалить запись
+      operationId: deleteEntry
+      parameters:
+        - $ref: '#/components/parameters/TableNamePath'
+        - $ref: '#/components/parameters/EntryId'
+      responses:
+        '200':
+          description: Запись удалена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: |
+            Запись используется в других таблицах (например, материал
+            используется в работе — FK RESTRICT)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/works/{work_id}/materials:
+    get:
+      tags: [WorkMaterials]
+      summary: Материалы, связанные с работой
+      operationId: getWorkMaterials
+      parameters:
+        - $ref: '#/components/parameters/WorkId'
+      responses:
+        '200':
+          description: Список связанных материалов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WorkMaterial'
+    post:
+      tags: [WorkMaterials]
+      summary: Добавить материал к работе (списывает остаток по факту)
+      operationId: addWorkMaterial
+      parameters:
+        - $ref: '#/components/parameters/WorkId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkMaterialInput'
+      responses:
+        '200':
+          description: Материал добавлен к работе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Этот материал уже добавлен в работу
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/works_materials/{link_id}:
+    put:
+      tags: [WorkMaterials]
+      summary: Изменить количество/примечание связи (корректирует остаток)
+      operationId: updateWorkMaterial
+      parameters:
+        - $ref: '#/components/parameters/LinkId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkMaterialUpdate'
+      responses:
+        '200':
+          description: Связь обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    delete:
+      tags: [WorkMaterials]
+      summary: Убрать материал из работы (возвращает остаток)
+      operationId: deleteWorkMaterial
+      parameters:
+        - $ref: '#/components/parameters/LinkId'
+      responses:
+        '200':
+          description: Связь удалена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/materials/{material_id}/works:
+    get:
+      tags: [WorkMaterials]
+      summary: Работы, в которых использован материал
+      operationId: getMaterialWorks
+      parameters:
+        - $ref: '#/components/parameters/MaterialId'
+      responses:
+        '200':
+          description: Список работ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MaterialWork'
+
+  /api/upload_images/{table_name}/{entry_id}:
+    post:
+      tags: [Images]
+      summary: Загрузить изображения (до 5 на запись)
+      operationId: uploadImages
+      parameters:
+        - $ref: '#/components/parameters/TableNamePath'
+        - $ref: '#/components/parameters/EntryId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                images:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        '200':
+          description: Изображения загружены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageUploadResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/images/{table_name}/{entry_id}:
+    get:
+      tags: [Images]
+      summary: Получить изображения записи
+      operationId: getEntryImages
+      parameters:
+        - $ref: '#/components/parameters/TableNamePath'
+        - $ref: '#/components/parameters/EntryId'
+      responses:
+        '200':
+          description: Список URL изображений
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImagesResponse'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/delete_images/{table_name}/{entry_id}:
+    delete:
+      tags: [Images]
+      summary: Удалить указанные изображения записи
+      operationId: deleteImages
+      parameters:
+        - $ref: '#/components/parameters/TableNamePath'
+        - $ref: '#/components/parameters/EntryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteImagesRequest'
+      responses:
+        '200':
+          description: Изображения удалены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/uploads/{subpath}:
+    get:
+      tags: [Images]
+      summary: Получить файл изображения
+      operationId: getUploadedImage
+      parameters:
+        - name: subpath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Файл изображения
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/test:
+    get:
+      tags: [System]
+      summary: Проверка доступности API
+      operationId: testEndpoint
+      responses:
+        '200':
+          description: API доступно
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestResponse'
+
+  /api/openapi.yaml:
+    get:
+      tags: [System]
+      summary: Спецификация OpenAPI (YAML)
+      operationId: getOpenApiSpec
+      responses:
+        '200':
+          description: OpenAPI-спецификация
+          content:
+            application/yaml:
+              schema:
+                type: string
+
+components:
+  parameters:
+    TableNamePath:
+      name: table_name
+      in: path
+      required: true
+      description: Имя таблицы
+      schema:
+        $ref: '#/components/schemas/TableName'
+    EntryId:
+      name: entry_id
+      in: path
+      required: true
+      description: ID записи
+      schema:
+        type: integer
+        format: int64
+    WorkId:
+      name: work_id
+      in: path
+      required: true
+      description: ID работы
+      schema:
+        type: integer
+        format: int64
+    MaterialId:
+      name: material_id
+      in: path
+      required: true
+      description: ID материала
+      schema:
+        type: integer
+        format: int64
+    LinkId:
+      name: link_id
+      in: path
+      required: true
+      description: ID связи work-materials
+      schema:
+        type: integer
+        format: int64
+
+  responses:
+    BadRequest:
+      description: Некорректный запрос
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Запись не найдена
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ServerError:
+      description: Внутренняя ошибка сервера
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    TableName:
+      type: string
+      enum: [os, works, materials, equipment]
+
+    WorkStatus:
+      type: string
+      description: Канонические статусы работ
+      enum:
+        - Запланировано
+        - "В процессе"
+        - Завершено
+
+    OsStatus:
+      type: string
+      description: Канонические статусы ОС (поле CMDB_STATUS)
+      enum:
+        - В эксплуатации
+        - Снят с эксплуатации
+        - "В разработке/На тестировании"
+
+    GenericRow:
+      type: object
+      additionalProperties: true
+      description: |
+        Произвольный набор колонок таблицы (ключ — имя колонки в верхнем
+        регистре). Используется для добавления/обновления и для элементов
+        списка.
+      example:
+        DESCRIPTION: Замена HDD
+        OS: HP Proliant DL380G7
+        PLANNED_DATE: 10.10.2024
+        STATUS: Запланировано
+
+    Os:
+      type: object
+      properties:
+        ID:
+          type: integer
+          format: int64
+        REGION:
+          type: string
+          nullable: true
+        HOST_NAME:
+          type: string
+          nullable: true
+        HOST_NAME_CMDB:
+          type: string
+          nullable: true
+        KE:
+          type: string
+          nullable: true
+        PLATFORM_ADDRESS:
+          type: string
+          nullable: true
+        CATEGORY:
+          type: string
+          nullable: true
+        EQUIPMENT_TYPE:
+          type: string
+          nullable: true
+        SERVER_TYPE:
+          type: string
+          nullable: true
+        EQUIPMENT_MODEL:
+          type: string
+          nullable: true
+        CMDB_STATUS:
+          type: string
+          nullable: true
+          description: Статус ОС. Обычно одно из значений OsStatus.
+        CPU:
+          type: integer
+          format: int64
+          nullable: true
+        RAM:
+          type: integer
+          format: int64
+          nullable: true
+        HDD:
+          type: integer
+          format: int64
+          nullable: true
+        TL:
+          type: integer
+          format: int64
+          nullable: true
+        OS:
+          type: string
+          nullable: true
+        UPDATE_COMMENTS:
+          type: string
+          nullable: true
+        INVENTORY_NUMBER:
+          type: string
+          nullable: true
+        EXPLOITATION_DATE:
+          type: string
+          nullable: true
+        SERIAL_NUMBER:
+          type: string
+          nullable: true
+        OS_NAME:
+          type: string
+          nullable: true
+        CPU_QUANTITY:
+          type: string
+          nullable: true
+        CORES_NUM:
+          type: string
+          nullable: true
+        MEMORY_GB:
+          type: string
+          nullable: true
+        HDD_GB:
+          type: string
+          nullable: true
+        HDD_TYPE:
+          type: string
+          nullable: true
+        HDD_QUANTITY:
+          type: string
+          nullable: true
+        STATUS:
+          type: string
+          nullable: true
+          deprecated: true
+          description: Legacy-поле, используйте CMDB_STATUS
+        IMAGE_PATH:
+          type: string
+          nullable: true
+
+    Work:
+      type: object
+      properties:
+        ID:
+          type: integer
+          format: int64
+        DESCRIPTION:
+          type: string
+          nullable: true
+        OS:
+          type: string
+          nullable: true
+          description: Модель оборудования ОС (EQUIPMENT_MODEL)
+        PLANNED_DATE:
+          type: string
+          nullable: true
+        ACTUAL_DATE:
+          type: string
+          nullable: true
+        STATUS:
+          type: string
+          nullable: true
+          description: Обычно одно из значений WorkStatus
+        COMMENT:
+          type: string
+          nullable: true
+        MATERIALS_COUNT:
+          type: integer
+          description: Кол-во связанных материалов (только в списке /api/works)
+        IMAGE_PATH:
+          type: string
+          nullable: true
+
+    Material:
+      type: object
+      properties:
+        ID:
+          type: integer
+          format: int64
+        TYPE:
+          type: string
+          nullable: true
+        NAME:
+          type: string
+          nullable: true
+        PART_NUMBER:
+          type: string
+          nullable: true
+        SERIAL_NUMBER:
+          type: string
+          nullable: true
+        QUANTITY:
+          type: integer
+          description: Остаток на складе
+        COMPATIBILITY:
+          type: string
+          nullable: true
+        WAYBILL_NUMBER:
+          type: string
+          nullable: true
+        STORE_ADDRESS:
+          type: string
+          nullable: true
+        ROW:
+          type: string
+          nullable: true
+        SHELF:
+          type: string
+          nullable: true
+        CONTAINER:
+          type: string
+          nullable: true
+        RECEIVE_DATE:
+          type: string
+          nullable: true
+        COMMENT:
+          type: string
+          nullable: true
+        IMAGE_PATH:
+          type: string
+          nullable: true
+
+    Equipment:
+      type: object
+      properties:
+        ID:
+          type: integer
+          format: int64
+        MODEL:
+          type: string
+          nullable: true
+        MODEL_SERIES:
+          type: string
+          nullable: true
+        COMMENT:
+          type: string
+          nullable: true
+        IMAGE_PATH:
+          type: string
+          nullable: true
+
+    WorkMaterial:
+      type: object
+      properties:
+        LINK_ID:
+          type: integer
+          format: int64
+        WORK_ID:
+          type: integer
+          format: int64
+        MATERIAL_ID:
+          type: integer
+          format: int64
+        PLANNED_QUANTITY:
+          type: integer
+          nullable: true
+        ACTUAL_QUANTITY:
+          type: integer
+          nullable: true
+        NOTE:
+          type: string
+          nullable: true
+        MATERIAL_NAME:
+          type: string
+          nullable: true
+        MATERIAL_TYPE:
+          type: string
+          nullable: true
+        PART_NUMBER:
+          type: string
+          nullable: true
+        SERIAL_NUMBER:
+          type: string
+          nullable: true
+        STORE_ADDRESS:
+          type: string
+          nullable: true
+
+    MaterialWork:
+      type: object
+      properties:
+        LINK_ID:
+          type: integer
+          format: int64
+        WORK_ID:
+          type: integer
+          format: int64
+        PLANNED_QUANTITY:
+          type: integer
+          nullable: true
+        ACTUAL_QUANTITY:
+          type: integer
+          nullable: true
+        NOTE:
+          type: string
+          nullable: true
+        WORK_NAME:
+          type: string
+          nullable: true
+        OS:
+          type: string
+          nullable: true
+        STATUS:
+          type: string
+          nullable: true
+        PLANNED_DATE:
+          type: string
+          nullable: true
+
+    WorkMaterialInput:
+      type: object
+      required: [MATERIAL_ID]
+      properties:
+        MATERIAL_ID:
+          type: integer
+          format: int64
+        PLANNED_QUANTITY:
+          type: integer
+          nullable: true
+        ACTUAL_QUANTITY:
+          type: integer
+          nullable: true
+        NOTE:
+          type: string
+          nullable: true
+
+    WorkMaterialUpdate:
+      type: object
+      properties:
+        PLANNED_QUANTITY:
+          type: integer
+          nullable: true
+        ACTUAL_QUANTITY:
+          type: integer
+          nullable: true
+        NOTE:
+          type: string
+          nullable: true
+
+    DeleteImagesRequest:
+      type: object
+      required: [image_filenames]
+      properties:
+        image_filenames:
+          type: array
+          items:
+            type: string
+
+    TableListResponse:
+      type: object
+      properties:
+        active_table:
+          $ref: '#/components/schemas/TableName'
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/GenericRow'
+        search_query:
+          type: string
+        columns:
+          type: array
+          items:
+            type: string
+
+    AddFormFieldsResponse:
+      type: object
+      properties:
+        columns:
+          type: array
+          items:
+            type: string
+        columns_translated:
+          type: array
+          items:
+            type: string
+
+    OptionsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: string
+
+    AddResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        id:
+          type: integer
+          format: int64
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+
+    UpdateResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        image_url:
+          type: string
+
+    ImageUploadResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        images:
+          type: array
+          items:
+            type: string
+        main_image:
+          type: string
+          nullable: true
+
+    ImagesResponse:
+      type: object
+      properties:
+        images:
+          type: array
+          items:
+            type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+
+    TestResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string

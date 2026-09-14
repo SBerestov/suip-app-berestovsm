@@ -708,3 +708,8 @@ def get_uploaded_image(subpath):
 @api_bp.route('/test', methods=['GET'])
 def test_endpoint():
     return jsonify({"success": True, "message": "Test successful"}), 200
+
+@api_bp.route('/openapi.yaml', methods=['GET'])
+def get_openapi_spec():
+    project_root = os.path.abspath(os.path.join(current_app.root_path, '..'))
+    return send_from_directory(project_root, 'openapi.yaml', mimetype='application/yaml')
