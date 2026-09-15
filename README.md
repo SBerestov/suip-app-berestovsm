@@ -12,6 +12,9 @@
 - Python 3.10+
 - Flask 3.1.0
 - PostgreSQL
+- React
+- TypeScript
+- TailwindCSS
 
 ## Запуск локально
 1. **Установить PostgreSQL**
@@ -27,11 +30,13 @@ https://www.postgresql.org/download/
    cd suip-app-berestovsm
 
 3. **Настроить config**
-В корне проекта, в файле config.example.py введите данные созданной БД: name, user, password, port и переименуйте файл с config.example.py -> config.py
+
+В корне проекта, в файле config.example.py введите данные созданной БД: 
+name, user, password, port и переименуйте файл с config.example.py -> config.py
 
 4. **Забилдить фронт**
    ```bash
-   Открыть другой терминал
+   # Открыть другой терминал
 
    cd .\frontend\
    npm install
